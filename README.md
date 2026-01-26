@@ -14,7 +14,9 @@ AI destekli bir sistem ile 3D objelerin görsellerinden veya açıklamalarından
 
 - Python 3.8+
 - Node.js 16+ (Frontend için)
-- OpenSCAD (3D render için)
+- **OpenSCAD** - Sisteminizde kurulu olmalıdır (3D render için)
+  - Windows: [OpenSCAD İndirme](https://openscad.org/downloads.html)
+  - Kurulum sonrası `openscad.exe` yolunun sistem PATH'inde olması veya varsayılan konumda olması gerekir
 - API Keys:
   - io_net API Key - `IO_NET_KEY` (Qwen, Llama modelleri için)
 
