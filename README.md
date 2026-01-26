@@ -210,12 +210,16 @@ Testler şunları kapsar:
 - **Online Render**: OpenSCAD yoksa veya local render başarısız olursa, Selenium ile online render yapılır
 - **Online Editor Linki**: Her render işleminden sonra, kodunuzu online editor'de görüntüleyebileceğiniz bir link sağlanır
 - API rate limit'leri için retry mekanizması mevcuttur
+- **OpenSCAD**: Sisteminizde yüklü değilse, otomatik olarak online render kullanılır
+- **Selenium**: Online render için Selenium ve ChromeDriver gereklidir (otomatik kurulur)
+- **Google Chrome**: Online render için Google Chrome'un yüklü olması gerekir
+- API rate limit'leri için retry mekanizması mevcuttur
 - Backend port: `5002`
 - Frontend port: `3000`
 - Frontend proxy ayarları `frontend/vite.config.js` dosyasında yapılandırılabilir
 - io_net backend OpenAI client kütüphanesi kullanır (`openai>=1.0.0`)
 - Model: `Qwen/Qwen2.5-VL-32B-Instruct` (Vision destekliyor)
-- Selenium ve webdriver-manager online render için gereklidir (requirements.txt'de mevcut)
+- Online editor: [OpenSCAD Playground](https://ochafik.com/openscad2/) (üyelik gerektirmez)
 
 ## 🤝 Katkıda Bulunma
 
