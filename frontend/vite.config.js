@@ -7,7 +7,8 @@ export default defineConfig({
     port: 3000,
     proxy: {
       '/api': {
-        target: 'http://localhost:5001',  // Improved backend port
+        target: 'http://localhost:5002',  // io_net backend port (test için)
+        // target: 'http://localhost:5001',  // Improved backend port
         changeOrigin: true
       }
     }

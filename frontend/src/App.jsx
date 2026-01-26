@@ -15,12 +15,10 @@ function App() {
   const [error, setError] = useState(null)
   const [improving, setImproving] = useState(false)
   const [renderError, setRenderError] = useState(null)
-  const [thinkingMode, setThinkingMode] = useState(false)
-  
-  // YENİ: Improved backend özellikleri
-  const [enableSelfCorrection, setEnableSelfCorrection] = useState(true)
-  const [enableFewShot, setEnableFewShot] = useState(true)
-  const [improvements, setImprovements] = useState(null)
+  // io_net backend için ayarlar
+  const [temperature, setTemperature] = useState(0.7)
+  const [apiProvider, setApiProvider] = useState('io_net') // 'io_net' veya 'improved'
+  const [improvements, setImprovements] = useState(null) // Opsiyonel - sadece improved backend'de var
 
   const handleImageUpload = (e) => {
     const file = e.target.files[0]
@@ -48,20 +46,33 @@ function App() {
     setRenderError(null)
 
     try {
-      const response = await axios.post(`${API_BASE}/generate`, {
+      // io_net backend için payload
+      const payload = {
         image: image,
         description: description,
         instruction: instruction,
-        thinking_mode: thinkingMode,
-        // YENİ: Improved backend parametreleri
-        enable_self_correction: enableSelfCorrection,
-        enable_few_shot: enableFewShot
-      })
+        temperature: temperature
+      }
+      
+      // Improved backend için ek parametreler (opsiyonel)
+      if (apiProvider === 'improved') {
+        // Bu parametreler sadece improved backend'de çalışır
+        // payload.thinking_mode = thinkingMode
+        // payload.enable_self_correction = enableSelfCorrection
+        // payload.enable_few_shot = enableFewShot
+      }
+      
+      const response = await axios.post(`${API_BASE}/generate`, payload)
 
       if (response.data.success) {
         setCode(response.data.code)
         
-        // YENİ: Improvement bilgilerini kaydet
+        // API provider'ı response'dan al
+        if (response.data.api_provider) {
+          setApiProvider(response.data.api_provider)
+        }
+        
+        // Improvement bilgilerini kaydet (sadece improved backend'de var)
         if (response.data.improvements) {
           setImprovements(response.data.improvements)
         }
@@ -240,7 +251,7 @@ function App() {
       <div className="container">
         <header>
           <h1>🎨 3D Obje → OpenSCAD Kodu Üretici</h1>
-          <p>Görsel veya açıklamadan OpenSCAD kodu üretin (Improved Backend v2.0)</p>
+          <p>Görsel veya açıklamadan OpenSCAD kodu üretin (io_net Backend)</p>
         </header>
 
         <div className="main-content">
@@ -287,60 +298,30 @@ function App() {
               />
             </div>
 
-            {/* YENİ: Improved Backend Ayarları */}
-            <div className="card" style={{ padding: '15px', backgroundColor: '#f0f7ff', border: '2px solid #2196F3' }}>
-              <h3 style={{ marginTop: 0, color: '#1976D2' }}>✨ Improved Backend Özellikleri</h3>
+            {/* io_net Backend Ayarları */}
+            <div className="card" style={{ padding: '15px', backgroundColor: '#fff3e0', border: '2px solid #FF9800' }}>
+              <h3 style={{ marginTop: 0, color: '#E65100' }}>⚙️ io_net Backend Ayarları</h3>
               
               <div style={{ marginBottom: '15px' }}>
-                <label style={{ display: 'flex', alignItems: 'center', gap: '10px', cursor: 'pointer' }}>
-                  <input
-                    type="checkbox"
-                    checked={enableSelfCorrection}
-                    onChange={(e) => setEnableSelfCorrection(e.target.checked)}
-                    style={{ width: '20px', height: '20px', cursor: 'pointer' }}
-                  />
-                  <span style={{ fontSize: '14px', fontWeight: '500' }}>
-                    🔄 Self-Correction Loop {enableSelfCorrection ? '(Açık)' : '(Kapalı)'}
-                  </span>
+                <label style={{ display: 'block', marginBottom: '8px', fontSize: '14px', fontWeight: '500' }}>
+                  🌡️ Temperature: {temperature.toFixed(1)}
                 </label>
-                <small style={{ display: 'block', marginLeft: '30px', color: '#666', fontSize: '12px' }}>
-                  Model kendi kodunu gözden geçirip otomatik düzeltir (Syntax hatalarını azaltır)
-                </small>
-              </div>
-
-              <div style={{ marginBottom: '15px' }}>
-                <label style={{ display: 'flex', alignItems: 'center', gap: '10px', cursor: 'pointer' }}>
-                  <input
-                    type="checkbox"
-                    checked={enableFewShot}
-                    onChange={(e) => setEnableFewShot(e.target.checked)}
-                    style={{ width: '20px', height: '20px', cursor: 'pointer' }}
-                  />
-                  <span style={{ fontSize: '14px', fontWeight: '500' }}>
-                    📚 Few-Shot Learning {enableFewShot ? '(Açık)' : '(Kapalı)'}
-                  </span>
-                </label>
-                <small style={{ display: 'block', marginLeft: '30px', color: '#666', fontSize: '12px' }}>
-                  Başarılı örneklerle model eğitilir (Daha tutarlı kod formatı)
-                </small>
-              </div>
-
-              <div>
-                <label style={{ display: 'flex', alignItems: 'center', gap: '10px', cursor: 'pointer' }}>
-                  <input
-                    type="checkbox"
-                    checked={thinkingMode}
-                    onChange={(e) => setThinkingMode(e.target.checked)}
-                    style={{ width: '20px', height: '20px', cursor: 'pointer' }}
-                  />
-                  <span style={{ fontSize: '14px', fontWeight: '500' }}>
-                    🧠 Thinking Mode {thinkingMode ? '(Açık)' : '(Kapalı)'}
-                  </span>
-                </label>
-                <small style={{ display: 'block', marginLeft: '30px', color: '#666', fontSize: '12px' }}>
-                  {thinkingMode 
-                    ? 'Model önce düşünür, sonra cevap verir. Daha detaylı analiz için.' 
-                    : 'Model doğrudan cevap verir. Daha hızlı sonuçlar için.'}
+                <input
+                  type="range"
+                  min="0"
+                  max="1"
+                  step="0.1"
+                  value={temperature}
+                  onChange={(e) => setTemperature(parseFloat(e.target.value))}
+                  style={{ width: '100%', cursor: 'pointer' }}
+                />
+                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '11px', color: '#666', marginTop: '4px' }}>
+                  <span>0.0 (Deterministik)</span>
+                  <span>0.5</span>
+                  <span>1.0 (Yaratıcı)</span>
+                </div>
+                <small style={{ display: 'block', marginTop: '8px', color: '#666', fontSize: '12px' }}>
+                  Düşük değerler daha tutarlı, yüksek değerler daha yaratıcı sonuçlar üretir
                 </small>
               </div>
             </div>
@@ -365,8 +346,8 @@ function App() {
               </div>
             )}
 
-            {/* YENİ: Improvement Metrikleri */}
-            {improvements && (
+            {/* Improvement Metrikleri (Sadece Improved Backend'de var) */}
+            {apiProvider === 'improved' && improvements && (
               <div className="card" style={{ 
                 padding: '15px', 
                 backgroundColor: '#e8f5e9', 
@@ -387,6 +368,22 @@ function App() {
                   <div>
                     <strong>Few-Shot:</strong> {improvements.few_shot_examples_used ? '✅ Kullanıldı' : '❌ Kullanılmadı'}
                   </div>
+                </div>
+              </div>
+            )}
+            
+            {/* io_net Backend Bilgisi */}
+            {apiProvider === 'io_net' && code && (
+              <div className="card" style={{ 
+                padding: '15px', 
+                backgroundColor: '#fff3e0', 
+                border: '2px solid #FF9800',
+                marginBottom: '20px'
+              }}>
+                <h3 style={{ marginTop: 0, color: '#E65100' }}>🔗 API Provider: io_net</h3>
+                <div style={{ fontSize: '13px' }}>
+                  <div><strong>Model:</strong> meta-llama/Llama-3.3-70B-Instruct</div>
+                  <div><strong>Temperature:</strong> {temperature.toFixed(1)}</div>
                 </div>
               </div>
             )}
@@ -414,23 +411,24 @@ function App() {
               <div className="card-header">
                 <h2>🖼️ Render Önizleme</h2>
                 <div style={{ display: 'flex', gap: '8px' }}>
-                  {code && renderedImage && image && (
+                  {/* io_net backend'de improve ve fix endpoint'leri yok, bu yüzden butonları gizle */}
+                  {apiProvider === 'improved' && code && renderedImage && image && (
                     <button
                       className="icon-button"
                       onClick={improveCode}
                       disabled={loading || improving}
-                      title="Görselle Karşılaştırarak Geliştir"
+                      title="Görselle Karşılaştırarak Geliştir (Sadece Improved Backend)"
                       style={{ backgroundColor: '#4CAF50', color: 'white' }}
                     >
                       {improving ? '⏳' : '✨'}
                     </button>
                   )}
-                  {code && renderError && image && (
+                  {apiProvider === 'improved' && code && renderError && image && (
                     <button
                       className="icon-button"
                       onClick={fixCodeWithImages}
                       disabled={loading}
-                      title="Hatayı, Görselleri ve Kodu Analiz Ederek Düzelt"
+                      title="Hatayı, Görselleri ve Kodu Analiz Ederek Düzelt (Sadece Improved Backend)"
                       style={{ backgroundColor: '#FF9800', color: 'white' }}
                     >
                       🔧
