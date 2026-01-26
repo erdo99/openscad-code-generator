@@ -150,9 +150,6 @@ test_ionet.bat
   - Response: `{ "success": true, "image": "base64", "method": "local|online", "online_editor_link": "url" }`
   - Önce local OpenSCAD denenir, başarısız olursa online render kullanılır
   - Her durumda `online_editor_link` sağlanır
-  - Response: `{ "success": true, "image": "base64", "method": "local|online", "online_editor_link": "url" }`
-  - Önce local OpenSCAD denenir, başarısız olursa online render kullanılır
-  - Her durumda `online_editor_link` sağlanır
   
 - `GET /api/health` - API sağlık kontrolü
 
@@ -168,21 +165,16 @@ test_ionet.bat
   - OpenSCAD kuruluysa önce local render denenir (hızlı ve kaliteli)
   - Local render başarısız olursa veya OpenSCAD yoksa, online render kullanılır
 - **Online Editor Entegrasyonu**: 
-  - Her render işleminden sonra online editor linki sağlanır
+  - Her render işleminden sonra online editor linki sağlanır (render başarılı olsa bile)
   - Kodunuz otomatik olarak online editor'de açılır
   - [OpenSCAD Playground](https://ochafik.com/openscad2/) kullanılır (üyelik gerektirmez)
 - **Selenium Automation**: Online render için otomatik browser kontrolü
+- **Fallback Mekanizması**: OpenSCAD kurulu değilse veya hata olursa, otomatik olarak online render'a geçilir
 
 ### OpenAI-Compatible API
 - OpenAI client kütüphanesi ile entegrasyon
 - Standart API formatı
 - Retry mekanizması ile güvenilir bağlantı
-
-### Render Sistemi
-- **Akıllı Render Stratejisi**: Önce local OpenSCAD denenir, başarısız olursa online render kullanılır
-- **Online Editor Entegrasyonu**: Selenium ile otomatik browser automation
-- **Her Zaman Link**: Render başarılı olsa bile, online editor'de görüntülemek için link sağlanır
-- **Fallback Mekanizması**: OpenSCAD kurulu değilse veya hata olursa, otomatik olarak online render'a geçilir
 
 ### Temperature Kontrolü
 - Frontend'den model yaratıcılığını ayarlama
