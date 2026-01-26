@@ -45,3 +45,11 @@ Thumbs.db
 *.md
 !README.md
 !frontend/README.md
+
+# Other backends (kept locally, not pushed to GitHub for hackathon)
+backend_api.py
+backend_api_improved.py
+test_backend_improved.py
+start_backend.bat
+start_backend_improved.bat
+run_tests.bat
