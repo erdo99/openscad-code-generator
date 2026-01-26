@@ -15,6 +15,7 @@ function App() {
   const [error, setError] = useState(null)
   const [improving, setImproving] = useState(false)
   const [renderError, setRenderError] = useState(null)
+  const [onlineEditorLink, setOnlineEditorLink] = useState(null) // Online editor linki
   // io_net backend için ayarlar
   const [temperature, setTemperature] = useState(0.7)
   const [apiProvider, setApiProvider] = useState('io_net') // 'io_net' veya 'improved'
@@ -121,9 +122,36 @@ function App() {
         code: codeToUse
       })
 
+      // Online editor linki varsa kaydet (başarılı olsa bile)
+      if (response.data.online_editor_link) {
+        setOnlineEditorLink(response.data.online_editor_link)
+        console.log('🌐 Online editor linki alındı:', response.data.online_editor_link)
+      } else {
+        setOnlineEditorLink(null)
+      }
+      
       if (response.data.success) {
-        setRenderedImage(`data:image/png;base64,${response.data.image}`)
-        setRenderError(null)
+        const imageData = response.data.image
+        if (imageData) {
+          // Base64 string'i kontrol et
+          const base64Image = imageData.startsWith('data:') 
+            ? imageData 
+            : `data:image/png;base64,${imageData}`
+          
+          console.log('✅ Render başarılı, görsel set ediliyor...')
+          console.log('Image data length:', imageData.length)
+          console.log('Method:', response.data.method)
+          
+          setRenderedImage(base64Image)
+          setRenderError(null)
+          
+          if (response.data.method === 'online') {
+            console.log('✅ Online render ile başarılı (Selenium)')
+          }
+        } else {
+          console.error('⚠️ Response başarılı ama image data yok!')
+          setRenderError('Render başarılı ama görsel verisi alınamadı')
+        }
       } else {
         if (response.data.error) {
           setRenderError(response.data.error)
@@ -135,6 +163,12 @@ function App() {
       console.error('Render error:', err.response?.data || err)
       setError(errorMsg)
       setRenderError(errorMsg)
+      // Online editor linki varsa kaydet
+      if (err.response?.data?.online_editor_link) {
+        setOnlineEditorLink(err.response.data.online_editor_link)
+      } else {
+        setOnlineEditorLink(null)
+      }
     } finally {
       setLoading(false)
     }
@@ -382,7 +416,7 @@ function App() {
               }}>
                 <h3 style={{ marginTop: 0, color: '#E65100' }}>🔗 API Provider: io_net</h3>
                 <div style={{ fontSize: '13px' }}>
-                  <div><strong>Model:</strong> meta-llama/Llama-3.3-70B-Instruct</div>
+                  <div><strong>Model:</strong> Qwen/Qwen2.5-VL-32B-Instruct</div>
                   <div><strong>Temperature:</strong> {temperature.toFixed(1)}</div>
                 </div>
               </div>
@@ -455,6 +489,38 @@ function App() {
                   </div>
                 )}
               </div>
+              {/* Online editor linki - her zaman göster (render başarılı olsa bile) */}
+              {onlineEditorLink && (
+                <div style={{ 
+                  marginTop: '10px', 
+                  padding: '12px', 
+                  backgroundColor: '#e3f2fd', 
+                  border: '1px solid #2196F3',
+                  borderRadius: '4px',
+                  fontSize: '12px'
+                }}>
+                  <strong>🌐 Online Editor'de Aç:</strong><br />
+                  <a 
+                    href={onlineEditorLink} 
+                    target="_blank" 
+                    rel="noopener noreferrer"
+                    style={{ 
+                      color: '#1976d2', 
+                      textDecoration: 'underline',
+                      fontSize: '13px',
+                      wordBreak: 'break-all',
+                      display: 'inline-block',
+                      marginTop: '5px'
+                    }}
+                  >
+                    {onlineEditorLink}
+                  </a>
+                  <br />
+                  <small style={{ display: 'block', marginTop: '8px', color: '#666' }}>
+                    💡 Kodunuz otomatik olarak online editor'de açılacak. Orada render'ı görebilirsiniz.
+                  </small>
+                </div>
+              )}
               {renderError && (
                 <div style={{ 
                   marginTop: '10px', 
@@ -466,6 +532,12 @@ function App() {
                 }}>
                   <strong>❌ Render Hatası:</strong><br />
                   {renderError}
+                  {renderError && renderError.includes('Selenium') && (
+                    <div style={{ marginTop: '10px', padding: '8px', backgroundColor: '#fff3cd', borderRadius: '4px' }}>
+                      <strong>💡 Not:</strong> Online render için Selenium kurulumu gerekli. 
+                      Backend terminalinde <code>pip install selenium webdriver-manager</code> komutunu çalıştırın.
+                    </div>
+                  )}
                 </div>
               )}
             </div>

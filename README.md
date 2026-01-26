@@ -7,6 +7,9 @@ AI destekli bir sistem ile 3D objelerin görsellerinden veya açıklamalarından
 - **Görsel Analiz**: 3D obje fotoğraflarından OpenSCAD kodu üretme (Vision destekleyen model ile)
 - **Metin Açıklaması**: Metin açıklamalarından OpenSCAD kodu üretme
 - **3D Render**: Üretilen kodun OpenSCAD ile render edilmesi
+  - **Local Render**: Sisteminizde OpenSCAD kuruluysa, otomatik olarak local render kullanılır
+  - **Online Render**: OpenSCAD yoksa veya local render başarısız olursa, Selenium ile online editor'de render yapılır
+  - **Online Editor Linki**: Her render işleminden sonra, kodunuzu online editor'de görüntüleyebileceğiniz bir link sağlanır
 - **Temperature Kontrolü**: Model yaratıcılığını ayarlama
 - **OpenAI-Compatible API**: Standart OpenAI client formatı
 
@@ -14,9 +17,14 @@ AI destekli bir sistem ile 3D objelerin görsellerinden veya açıklamalarından
 
 - Python 3.8+
 - Node.js 16+ (Frontend için)
-- **OpenSCAD** - Sisteminizde kurulu olmalıdır (3D render için)
+- **OpenSCAD** (Opsiyonel - Önerilir)
   - Windows: [OpenSCAD İndirme](https://openscad.org/downloads.html)
   - Kurulum sonrası `openscad.exe` yolunun sistem PATH'inde olması veya varsayılan konumda olması gerekir
+  - **Not**: OpenSCAD kurulu değilse, sistem otomatik olarak online render kullanır ve online editor linki sağlar
+- **Selenium & ChromeDriver** (Online render için - Opsiyonel)
+  - OpenSCAD kurulu değilse, online render için Selenium gereklidir
+  - `pip install selenium webdriver-manager` ile kurulur
+  - Google Chrome'un yüklü olması gerekir
 - API Keys:
   - io_net API Key - `IO_NET_KEY` (Qwen, Llama modelleri için)
 
@@ -139,6 +147,12 @@ test_ionet.bat
   
 - `POST /api/render` - Kodu render etme
   - Body: `{ "code": "openscad_code" }`
+  - Response: `{ "success": true, "image": "base64", "method": "local|online", "online_editor_link": "url" }`
+  - Önce local OpenSCAD denenir, başarısız olursa online render kullanılır
+  - Her durumda `online_editor_link` sağlanır
+  - Response: `{ "success": true, "image": "base64", "method": "local|online", "online_editor_link": "url" }`
+  - Önce local OpenSCAD denenir, başarısız olursa online render kullanılır
+  - Her durumda `online_editor_link` sağlanır
   
 - `GET /api/health` - API sağlık kontrolü
 
@@ -149,10 +163,26 @@ test_ionet.bat
 - 3D obje fotoğraflarından direkt OpenSCAD kodu üretme
 - OpenAI-compatible vision formatı
 
+### Render Sistemi
+- **Akıllı Render Stratejisi**: 
+  - OpenSCAD kuruluysa önce local render denenir (hızlı ve kaliteli)
+  - Local render başarısız olursa veya OpenSCAD yoksa, online render kullanılır
+- **Online Editor Entegrasyonu**: 
+  - Her render işleminden sonra online editor linki sağlanır
+  - Kodunuz otomatik olarak online editor'de açılır
+  - [OpenSCAD Playground](https://ochafik.com/openscad2/) kullanılır (üyelik gerektirmez)
+- **Selenium Automation**: Online render için otomatik browser kontrolü
+
 ### OpenAI-Compatible API
 - OpenAI client kütüphanesi ile entegrasyon
 - Standart API formatı
 - Retry mekanizması ile güvenilir bağlantı
+
+### Render Sistemi
+- **Akıllı Render Stratejisi**: Önce local OpenSCAD denenir, başarısız olursa online render kullanılır
+- **Online Editor Entegrasyonu**: Selenium ile otomatik browser automation
+- **Her Zaman Link**: Render başarılı olsa bile, online editor'de görüntülemek için link sağlanır
+- **Fallback Mekanizması**: OpenSCAD kurulu değilse veya hata olursa, otomatik olarak online render'a geçilir
 
 ### Temperature Kontrolü
 - Frontend'den model yaratıcılığını ayarlama
@@ -176,13 +206,16 @@ Testler şunları kapsar:
 
 ## 📝 Notlar
 
-- OpenSCAD'ın sisteminizde yüklü olması gerekmektedir (render için)
+- **OpenSCAD**: Sisteminizde yüklüyse, local render kullanılır (daha hızlı ve kaliteli)
+- **Online Render**: OpenSCAD yoksa veya local render başarısız olursa, Selenium ile online render yapılır
+- **Online Editor Linki**: Her render işleminden sonra, kodunuzu online editor'de görüntüleyebileceğiniz bir link sağlanır
 - API rate limit'leri için retry mekanizması mevcuttur
 - Backend port: `5002`
 - Frontend port: `3000`
 - Frontend proxy ayarları `frontend/vite.config.js` dosyasında yapılandırılabilir
 - io_net backend OpenAI client kütüphanesi kullanır (`openai>=1.0.0`)
 - Model: `Qwen/Qwen2.5-VL-32B-Instruct` (Vision destekliyor)
+- Selenium ve webdriver-manager online render için gereklidir (requirements.txt'de mevcut)
 
 ## 🤝 Katkıda Bulunma
 
