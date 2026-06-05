@@ -46,10 +46,15 @@ Thumbs.db
 !README.md
 !frontend/README.md
 
-# Other backends (kept locally, not pushed to GitHub for hackathon)
+# Local OpenSCAD dataset (236+ .scad dosyasi, GitHub'a push edilmez)
+data/files/
+
+# Windows batch scripts (local kullanim, GitHub'a push edilmez)
+*.bat
+
+# Other backends (kept locally, not pushed to GitHub)
 backend_api.py
 backend_api_improved.py
 test_backend_improved.py
-start_backend.bat
-start_backend_improved.bat
-run_tests.bat
+app.py
+app_glm47.py

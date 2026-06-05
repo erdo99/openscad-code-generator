@@ -16,10 +16,10 @@ function App() {
   const [improving, setImproving] = useState(false)
   const [renderError, setRenderError] = useState(null)
   const [onlineEditorLink, setOnlineEditorLink] = useState(null) // Online editor linki
-  // io_net backend için ayarlar
   const [temperature, setTemperature] = useState(0.7)
-  const [apiProvider, setApiProvider] = useState('io_net') // 'io_net' veya 'improved'
-  const [improvements, setImprovements] = useState(null) // Opsiyonel - sadece improved backend'de var
+  const [apiProvider, setApiProvider] = useState('huggingface') // 'huggingface' veya 'zai'
+  const [activeModel, setActiveModel] = useState('')
+  const [improvements, setImprovements] = useState(null)
 
   const handleImageUpload = (e) => {
     const file = e.target.files[0]
@@ -47,20 +47,12 @@ function App() {
     setRenderError(null)
 
     try {
-      // io_net backend için payload
       const payload = {
         image: image,
         description: description,
         instruction: instruction,
-        temperature: temperature
-      }
-      
-      // Improved backend için ek parametreler (opsiyonel)
-      if (apiProvider === 'improved') {
-        // Bu parametreler sadece improved backend'de çalışır
-        // payload.thinking_mode = thinkingMode
-        // payload.enable_self_correction = enableSelfCorrection
-        // payload.enable_few_shot = enableFewShot
+        temperature: temperature,
+        api_provider: apiProvider,
       }
       
       const response = await axios.post(`${API_BASE}/generate`, payload)
@@ -68,9 +60,11 @@ function App() {
       if (response.data.success) {
         setCode(response.data.code)
         
-        // API provider'ı response'dan al
         if (response.data.api_provider) {
           setApiProvider(response.data.api_provider)
+        }
+        if (response.data.model) {
+          setActiveModel(response.data.model)
         }
         
         // Improvement bilgilerini kaydet (sadece improved backend'de var)
@@ -232,6 +226,87 @@ function App() {
     alert('Kod panoya kopyalandı! ✅')
   }
 
+  // Online editor'e kod yüklemek için JavaScript kodu oluştur
+  // Direkt kodu embed eder (hash'ten decode etmeye gerek yok, zaten kodumuz var)
+  const generateCodeLoaderScript = (codeToLoad) => {
+    // Kodu JSON stringify ile güvenli hale getir
+    const codeEscaped = JSON.stringify(codeToLoad)
+    
+    return `(function() {
+      try {
+        // Kodu direkt kullan (hash'ten decode etmeye gerek yok)
+        const code = ${codeEscaped};
+        
+        // Editor'ün yüklenmesini bekle
+        function waitForEditor(maxWait = 10000) {
+          return new Promise((resolve, reject) => {
+            const startTime = Date.now();
+            const checkInterval = setInterval(() => {
+              // Monaco editor kontrolü
+              if (window.monaco && window.monaco.editor) {
+                const editors = window.monaco.editor.getEditors();
+                if (editors && editors.length > 0) {
+                  clearInterval(checkInterval);
+                  resolve(editors[0]);
+                  return;
+                }
+              }
+              
+              // Textarea kontrolü
+              const textareas = document.querySelectorAll('textarea');
+              for (let i = 0; i < textareas.length; i++) {
+                if (textareas[i].offsetParent !== null) {
+                  clearInterval(checkInterval);
+                  resolve(textareas[i]);
+                  return;
+                }
+              }
+              
+              // Timeout kontrolü
+              if (Date.now() - startTime > maxWait) {
+                clearInterval(checkInterval);
+                reject(new Error('Editor bulunamadı'));
+              }
+            }, 100);
+          });
+        }
+        
+        // Editor'ü bekle ve kodu yaz
+        waitForEditor().then((editor) => {
+          if (editor.setValue) {
+            // Monaco editor
+            editor.setValue(code);
+            editor.trigger('change', 'setValue');
+            console.log('✅ Kod Monaco editor\'e yazıldı!');
+          } else {
+            // Textarea
+            editor.value = code;
+            editor.dispatchEvent(new Event('input', { bubbles: true }));
+            editor.dispatchEvent(new Event('change', { bubbles: true }));
+            editor.dispatchEvent(new KeyboardEvent('keyup', { bubbles: true }));
+            console.log('✅ Kod textarea\'ya yazıldı!');
+          }
+        }).catch((e) => {
+          console.error('❌ Editor beklenirken hata:', e);
+          // Son çare: Tüm textarea'lara yazmayı dene
+          const textareas = document.querySelectorAll('textarea');
+          for (let i = 0; i < textareas.length; i++) {
+            if (textareas[i].offsetParent !== null) {
+              textareas[i].value = code;
+              textareas[i].dispatchEvent(new Event('input', { bubbles: true }));
+              textareas[i].dispatchEvent(new Event('change', { bubbles: true }));
+              console.log('✅ Kod textarea\'ya yazıldı (son çare)!');
+              return;
+            }
+          }
+          console.error('❌ Editor bulunamadı');
+        });
+      } catch (e) {
+        console.error('❌ Hata:', e);
+      }
+    })();`
+  }
+
   const improveCode = async () => {
     if (!image || !renderedImage) {
       setError('İyileştirme için hem orijinal görsel hem de render edilmiş görsel gereklidir!')
@@ -285,7 +360,7 @@ function App() {
       <div className="container">
         <header>
           <h1>🎨 3D Obje → OpenSCAD Kodu Üretici</h1>
-          <p>Görsel veya açıklamadan OpenSCAD kodu üretin (io_net Backend)</p>
+          <p>Görsel veya açıklamadan OpenSCAD kodu üretin (HuggingFace / ZAI)</p>
         </header>
 
         <div className="main-content">
@@ -332,9 +407,25 @@ function App() {
               />
             </div>
 
-            {/* io_net Backend Ayarları */}
             <div className="card" style={{ padding: '15px', backgroundColor: '#fff3e0', border: '2px solid #FF9800' }}>
-              <h3 style={{ marginTop: 0, color: '#E65100' }}>⚙️ io_net Backend Ayarları</h3>
+              <h3 style={{ marginTop: 0, color: '#E65100' }}>⚙️ API Ayarları</h3>
+
+              <div style={{ marginBottom: '15px' }}>
+                <label style={{ display: 'block', marginBottom: '8px', fontSize: '14px', fontWeight: '500' }}>
+                  🔌 API Sağlayıcı
+                </label>
+                <select
+                  value={apiProvider}
+                  onChange={(e) => setApiProvider(e.target.value)}
+                  style={{ width: '100%', padding: '8px', fontSize: '14px', borderRadius: '6px', border: '1px solid #ccc' }}
+                >
+                  <option value="huggingface">HuggingFace Router</option>
+                  <option value="zai">ZAI (GLM)</option>
+                </select>
+                <small style={{ display: 'block', marginTop: '8px', color: '#666', fontSize: '12px' }}>
+                  HuggingFace için HF_TOKEN, ZAI için NEW_KEY gerekir (.env)
+                </small>
+              </div>
               
               <div style={{ marginBottom: '15px' }}>
                 <label style={{ display: 'block', marginBottom: '8px', fontSize: '14px', fontWeight: '500' }}>
@@ -406,17 +497,16 @@ function App() {
               </div>
             )}
             
-            {/* io_net Backend Bilgisi */}
-            {apiProvider === 'io_net' && code && (
+            {code && (
               <div className="card" style={{ 
                 padding: '15px', 
                 backgroundColor: '#fff3e0', 
                 border: '2px solid #FF9800',
                 marginBottom: '20px'
               }}>
-                <h3 style={{ marginTop: 0, color: '#E65100' }}>🔗 API Provider: io_net</h3>
+                <h3 style={{ marginTop: 0, color: '#E65100' }}>🔗 API: {apiProvider}</h3>
                 <div style={{ fontSize: '13px' }}>
-                  <div><strong>Model:</strong> Qwen/Qwen2.5-VL-32B-Instruct</div>
+                  <div><strong>Model:</strong> {activeModel || '—'}</div>
                   <div><strong>Temperature:</strong> {temperature.toFixed(1)}</div>
                 </div>
               </div>
@@ -445,7 +535,6 @@ function App() {
               <div className="card-header">
                 <h2>🖼️ Render Önizleme</h2>
                 <div style={{ display: 'flex', gap: '8px' }}>
-                  {/* io_net backend'de improve ve fix endpoint'leri yok, bu yüzden butonları gizle */}
                   {apiProvider === 'improved' && code && renderedImage && image && (
                     <button
                       className="icon-button"
@@ -517,8 +606,46 @@ function App() {
                   </a>
                   <br />
                   <small style={{ display: 'block', marginTop: '8px', color: '#666' }}>
-                    💡 Kodunuz otomatik olarak online editor'de açılacak. Orada render'ı görebilirsiniz.
+                    💡 Link açıldıktan sonra, sayfa yüklendiğinde kod otomatik olarak editor'e yazılacak. 
+                    Eğer yazılmazsa, F12 → Console'a gidin ve aşağıdaki kodu çalıştırın:
                   </small>
+                  <div style={{ 
+                    marginTop: '8px', 
+                    padding: '8px', 
+                    backgroundColor: '#f5f5f5', 
+                    borderRadius: '4px',
+                    fontSize: '10px',
+                    fontFamily: 'monospace',
+                    overflow: 'auto',
+                    maxHeight: '120px',
+                    position: 'relative'
+                  }}>
+                    <button
+                      onClick={() => {
+                        const script = generateCodeLoaderScript(code)
+                        navigator.clipboard.writeText(script)
+                        alert('✅ JavaScript kodu panoya kopyalandı! Açılan sekmede F12 → Console\'a yapıştırın.')
+                      }}
+                      style={{
+                        position: 'absolute',
+                        top: '4px',
+                        right: '4px',
+                        backgroundColor: '#4caf50',
+                        color: 'white',
+                        border: 'none',
+                        padding: '4px 8px',
+                        borderRadius: '3px',
+                        cursor: 'pointer',
+                        fontSize: '10px'
+                      }}
+                      title="Kodu panoya kopyala"
+                    >
+                      📋 Kopyala
+                    </button>
+                    <code style={{ color: '#4caf50', display: 'block', paddingRight: '70px', whiteSpace: 'pre-wrap', wordBreak: 'break-all' }}>
+                      {generateCodeLoaderScript(code).substring(0, 500)}...
+                    </code>
+                  </div>
                 </div>
               )}
               {renderError && (

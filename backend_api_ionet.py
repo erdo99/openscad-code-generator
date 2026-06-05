@@ -1,9 +1,22 @@
 """
-Backend API for OpenSCAD Code Generator using io_net API
-io_net API entegrasyonu ile OpenSCAD kodu üretme
-Model: zai-org/GLM-4.7-Flash
+Backend API for OpenSCAD Code Generator
+HuggingFace ve ZAI API sağlayıcıları ile OpenSCAD kodu üretme
 """
 import os
+import sys
+
+# Windows terminalinde emoji/UTF-8 cikti sorunlarini onle
+def _configure_stdio_utf8():
+    for stream in (sys.stdout, sys.stderr):
+        reconfigure = getattr(stream, "reconfigure", None)
+        if callable(reconfigure):
+            try:
+                reconfigure(encoding="utf-8")
+            except Exception:
+                pass
+
+_configure_stdio_utf8()
+
 import base64
 import subprocess
 import tempfile
@@ -25,44 +38,145 @@ app = Flask(__name__)
 CORS(app)
 
 # Global değişkenler
-io_net_client = None  # OpenAI client instance
-io_net_api_key = None
-# io_net API base URL - .env'den oku veya varsayılan kullan (load_dotenv() sonrası)
-io_net_base_url = os.getenv('IO_NET_BASE_URL', 'https://api.intelligence.io.solutions/api/v1')  # io_net API base URL
 openscad_path = None
-model_name = "Qwen/Qwen2.5-VL-32B-Instruct"  # Vision destekleyen model
+default_provider = os.getenv('API_PROVIDER', 'huggingface').lower()
+api_clients = {}
+provider_models = {}
+provider_base_urls = {}
 last_api_call_time = 0
 min_api_interval = 1.0
+
+PROVIDER_CONFIG = {
+    'huggingface': {
+        'key_envs': ['HF_TOKEN', 'HUGGINGFACE_TOKEN'],
+        'base_url_env': 'HF_BASE_URL',
+        'default_base_url': 'https://router.huggingface.co/v1',
+        'model_env': 'HF_MODEL',
+        'fallback_model_env': 'MODEL_NAME',
+        'default_model': 'Qwen/Qwen2.5-VL-7B-Instruct',
+    },
+    'zai': {
+        'key_envs': ['NEW_KEY', 'SECOND_API_KEY', 'ZAI_API_KEY'],
+        'base_url_env': 'ZAI_BASE_URL',
+        'default_base_url': 'https://api.z.ai/api/paas/v4',
+        'model_env': 'ZAI_MODEL',
+        'fallback_model_env': 'MODEL_NAME',
+        'default_model': 'glm-4.6v-flash',
+    },
+}
 
 # ============================================================================
 # HELPER FUNCTIONS
 # ============================================================================
 
+def get_env_value(env_names):
+    """İlk bulunan env değişkenini döndürür."""
+    if isinstance(env_names, str):
+        env_names = [env_names]
+    for name in env_names:
+        value = os.getenv(name)
+        if value:
+            return value
+    return None
+
+
+def normalize_model_for_provider(provider, model):
+    """Sağlayıcıya göre model adını normalize eder."""
+    if provider == 'zai':
+        if '/' in model:
+            model = model.split('/')[-1]
+        return model.lower().replace('_', '-')
+    return model
+
+
+def get_provider_model(provider):
+    """Sağlayıcı için varsayılan model adını döndürür."""
+    cfg = PROVIDER_CONFIG[provider]
+    model = (
+        os.getenv(cfg['model_env'])
+        or os.getenv(cfg['fallback_model_env'])
+        or cfg['default_model']
+    )
+    return normalize_model_for_provider(provider, model)
+
+
+def provider_is_configured(provider):
+    """Sağlayıcı için API key tanımlı mı?"""
+    cfg = PROVIDER_CONFIG[provider]
+    return bool(get_env_value(cfg['key_envs']))
+
+
+def get_available_providers():
+    """API key'i tanımlı sağlayıcıları listeler."""
+    return [name for name in PROVIDER_CONFIG if provider_is_configured(name)]
+
+
+def resolve_provider(provider=None):
+    """Geçerli sağlayıcı adını döndürür."""
+    chosen = (provider or default_provider).lower()
+    if chosen not in PROVIDER_CONFIG:
+        raise Exception(f"Desteklenmeyen API sağlayıcısı: {chosen}")
+    if not provider_is_configured(chosen):
+        available = ', '.join(get_available_providers()) or 'yok'
+        raise Exception(
+            f"{chosen} için API key bulunamadı. .env dosyasını kontrol edin. "
+            f"Yapılandırılmış sağlayıcılar: {available}"
+        )
+    return chosen
+
+
+def get_api_client(provider):
+    """Sağlayıcı için OpenAI client döndürür (lazy init)."""
+    provider = resolve_provider(provider)
+    if provider in api_clients:
+        return api_clients[provider], provider_models[provider], provider_base_urls[provider]
+
+    cfg = PROVIDER_CONFIG[provider]
+    api_key = get_env_value(cfg['key_envs'])
+    base_url = (
+        os.getenv(cfg['base_url_env'])
+        or cfg['default_base_url']
+    ).rstrip('/') + '/'
+    model = get_provider_model(provider)
+
+    api_clients[provider] = OpenAI(api_key=api_key, base_url=base_url)
+    provider_models[provider] = model
+    provider_base_urls[provider] = base_url
+
+    print(f"✅ {provider} API client hazır")
+    print(f"   Model: {model}")
+    print(f"   Base URL: {base_url}")
+
+    return api_clients[provider], model, base_url
+
+
 def init_app():
     """Uygulamayı başlat"""
-    global io_net_client, io_net_api_key, openscad_path, model_name, io_net_base_url
-    
-    io_net_api_key = os.getenv('IO_NET_KEY') or os.getenv('IOINTELLIGENCE_API_KEY')
-    if not io_net_api_key:
-        raise Exception("API key bulunamadı! .env dosyasına IO_NET_KEY veya IOINTELLIGENCE_API_KEY ekleyin.")
-    
-    # Model adını .env'den oku (varsa)
-    env_model = os.getenv('IO_NET_MODEL', 'Qwen/Qwen2.5-VL-32B-Instruct')
-    model_name = env_model
-    
-    # Base URL'in sonunda slash olduğundan emin ol (OpenAI client formatı)
-    base_url = io_net_base_url.rstrip('/') + '/'
-    
-    # OpenAI client oluştur (io_net API OpenAI-compatible)
-    io_net_client = OpenAI(
-        api_key=io_net_api_key,
-        base_url=base_url
-    )
-    
-    print(f"✅ io_net API başlatıldı (OpenAI client)")
-    print(f"✅ Model: {model_name}")
-    print(f"✅ API Base URL: {base_url}")
-    
+    global openscad_path, default_provider
+
+    default_provider = os.getenv('API_PROVIDER', 'huggingface').lower()
+    if default_provider not in PROVIDER_CONFIG:
+        raise Exception(
+            f"Geçersiz API_PROVIDER: {default_provider}. "
+            f"Desteklenenler: {', '.join(PROVIDER_CONFIG.keys())}"
+        )
+
+    available = get_available_providers()
+    if not available:
+        raise Exception(
+            "Hiçbir API key bulunamadı! .env dosyasına şunlardan birini ekleyin:\n"
+            "- HuggingFace: HF_TOKEN\n"
+            "- ZAI: NEW_KEY veya SECOND_API_KEY"
+        )
+
+    if default_provider not in available:
+        default_provider = available[0]
+        print(f"⚠️ Varsayılan sağlayıcı yapılandırılmamış, {default_provider} kullanılıyor")
+
+    get_api_client(default_provider)
+    print(f"✅ Varsayılan API sağlayıcı: {default_provider}")
+    print(f"✅ Yapılandırılmış sağlayıcılar: {', '.join(available)}")
+
     openscad_path = find_openscad()
 
 def find_openscad():
@@ -130,11 +244,9 @@ def wait_for_rate_limit():
         time.sleep(wait_time)
     last_api_call_time = time.time()
 
-def api_call_with_retry(max_retries=3, model=None, messages=None, temperature=0.7, max_tokens=4000):
-    """io_net API çağrısı ile retry mekanizması (OpenAI client kullanarak)"""
-    global io_net_client
-    
-    if not io_net_client:
+def api_call_with_retry(client, max_retries=3, model=None, messages=None, temperature=0.7, max_tokens=4000):
+    """OpenAI-compatible API çağrısı ile retry mekanizması"""
+    if not client:
         raise Exception("OpenAI client başlatılmamış. init_app() çağrılmalı.")
     
     if not model:
@@ -153,7 +265,7 @@ def api_call_with_retry(max_retries=3, model=None, messages=None, temperature=0.
             
             # OpenAI client ile API çağrısı
             # stream=False olduğu için response bir ChatCompletion objesi döner
-            response = io_net_client.chat.completions.create(
+            response = client.chat.completions.create(
                 model=model,
                 messages=messages,
                 temperature=temperature,
@@ -733,18 +845,35 @@ def try_render(code):
 @app.route('/api/health', methods=['GET'])
 def health_check():
     """API sağlık kontrolü"""
+    providers_info = {}
+    for name in PROVIDER_CONFIG:
+        configured = provider_is_configured(name)
+        info: dict = {'configured': configured}
+        if configured:
+            info['model'] = get_provider_model(name)
+            info['base_url'] = (
+                os.getenv(PROVIDER_CONFIG[name]['base_url_env'])
+                or PROVIDER_CONFIG[name]['default_base_url']
+            )
+        providers_info[name] = info
+
+    active_model = provider_models.get(default_provider) if default_provider in provider_models else None
+
     return jsonify({
         'status': 'ok',
         'openscad_available': openscad_path is not None,
-        'model': model_name,
-        'api_provider': 'io_net'
+        'api_provider': default_provider,
+        'default_provider': default_provider,
+        'available_providers': get_available_providers(),
+        'providers': providers_info,
+        'model': active_model,
     })
 
 @app.route('/api/generate', methods=['POST'])
 def generate_code():
-    """OpenSCAD kodu üret (io_net API ile)"""
+    """OpenSCAD kodu üret (HuggingFace veya ZAI API ile)"""
     try:
-        print("📥 /api/generate isteği alındı (io_net API)")
+        print("📥 /api/generate isteği alındı")
         
         if not request.json:
             return jsonify({'error': 'JSON verisi gereklidir'}), 400
@@ -755,14 +884,18 @@ def generate_code():
         additional_instruction = data.get('instruction', '')
         temperature = data.get('temperature', 0.7)
         custom_model = data.get('model', None)  # Frontend'den model override
+        requested_provider = data.get('api_provider', None)
         
         print(f"📊 Gelen veri: image={image_base64 is not None}, description={bool(text_description)}, instruction={bool(additional_instruction)}")
         
         if not image_base64 and not text_description:
             return jsonify({'error': 'Görsel veya metin açıklaması gereklidir'}), 400
-        
-        if not io_net_api_key:
-            return jsonify({'error': 'API key başlatılmamış'}), 500
+
+        try:
+            provider = resolve_provider(requested_provider)
+            client, default_model, base_url = get_api_client(provider)
+        except Exception as e:
+            return jsonify({'error': str(e)}), 500
         
         wait_for_rate_limit()
         
@@ -860,8 +993,7 @@ The code should be ready to copy-paste directly into OpenSCAD and render success
 **BEGIN CODE GENERATION:**
 """)
         
-        # io_net API için messages formatı
-        # Qwen/Qwen2.5-VL-32B-Instruct modeli görsel desteği VAR (supports_images_input: true)
+        # OpenAI-compatible vision formatı
         # Görsel varsa vision formatında gönder
         
         user_content = []
@@ -895,14 +1027,17 @@ The code should be ready to copy-paste directly into OpenSCAD and render success
         ]
         
         # API çağrısı için parametreler
-        model_to_use = custom_model or model_name
+        model_to_use = custom_model or default_model
+        if custom_model:
+            model_to_use = normalize_model_for_provider(provider, model_to_use)
         
+        print(f"🤖 Provider: {provider}")
         print(f"🤖 Model: {model_to_use}, API çağrısı yapılıyor...")
         if image_base64:
             print("   📷 Görsel analizi aktif")
         
-        # OpenAI client ile API çağrısı
         response_data = api_call_with_retry(
+            client=client,
             model=model_to_use,
             messages=messages,
             temperature=temperature,
@@ -934,7 +1069,8 @@ The code should be ready to copy-paste directly into OpenSCAD and render success
             'code': clean_code,
             'success': True,
             'model': model_to_use,
-            'api_provider': 'io_net'
+            'api_provider': provider,
+            'base_url': base_url,
         })
         
     except Exception as e:
@@ -997,12 +1133,14 @@ def render_code():
 if __name__ == '__main__':
     try:
         init_app()
-        print(f"🚀 io_net Backend API başlatılıyor...")
-        print(f"📦 Model: {model_name}")
+        print(f"🚀 Backend API başlatılıyor...")
+        print(f"📦 Varsayılan sağlayıcı: {default_provider}")
+        if default_provider in provider_models:
+            print(f"📦 Model: {provider_models[default_provider]}")
         print(f"🔧 OpenSCAD: {'✅ Bulundu' if openscad_path else '❌ Bulunamadı'}")
         print(f"🌐 API: http://localhost:5002")
-        print(f"🔗 API Provider: io_net")
-        app.run(debug=True, host='0.0.0.0', port=5002)  # Farklı port (5002)
+        print(f"🔗 Yapılandırılmış sağlayıcılar: {', '.join(get_available_providers())}")
+        app.run(debug=True, host='0.0.0.0', port=5002)
     except Exception as e:
         import traceback
         print(f"❌ Hata: {e}")
